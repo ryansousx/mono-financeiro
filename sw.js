@@ -1,14 +1,14 @@
-const CACHE = "mono-financeiro-v2";
-const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
-self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
-  self.skipWaiting();
+const CACHE = 'mono-financeiro-v3';
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });
-self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("mono-financeiro-") && key !== CACHE).map(key => caches.delete(key)))));
-  self.clients.claim();
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key =>
+    key.startsWith('mono-financeiro-') && key !== CACHE).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
 });
-self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
+self.addEventListener('fetch', event => {
+  if (event.request.mode !== 'navigate' || !event.request.url.startsWith(self.registration.scope)) return;
+  event.respondWith(fetch(event.request).catch(() => caches.open(CACHE).then(cache => cache.match('./index.html'))));
 });
