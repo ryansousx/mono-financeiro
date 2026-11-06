@@ -96,6 +96,26 @@ main{margin-left:245px;width:calc(100% - 245px);padding:34px clamp(20px,4vw,58px
 </main>
 </div>
 <nav class="mobile-nav" id="mobileNav"><button class="active" data-page="home"><b>⌂</b>Início</button><button data-page="transactions"><b>↕</b>Movimentos</button><button data-page="pots"><b>◉</b>Caixinhas</button><button data-page="salary"><b>▤</b>Renda</button><button data-page="reports"><b>▥</b>Relatórios</button></nav>
+<style>
+#monoAssistant { color:inherit; background:#18181b; border:1px solid #555; border-radius:16px; padding:20px; width:min(420px,90vw); }
+#monoAssistant::backdrop { background:#000a; }
+#monoAssistant form { display:grid; gap:12px; }
+#monoAssistant input { padding:10px; }
+#monoAnswer { white-space:pre-line; overflow-wrap:anywhere; }
+#monoOpen { position:fixed; right:18px; bottom:80px; z-index:8; }
+</style>
+<button id="monoOpen" class="btn primary" type="button">Assistente MONO</button>
+<dialog id="monoAssistant" aria-labelledby="monoAssistantTitle">
+ <form method="dialog"><button class="btn" aria-label="Fechar assistente">Fechar</button></form>
+ <h2 id="monoAssistantTitle">Assistente MONO</h2>
+ <p>Modo local. Analisa o mês selecionado e as suas caixinhas no aparelho.</p>
+ <form id="monoQuestion">
+  <label for="monoAsk">Pergunte sobre seus gastos, saldo ou metas</label>
+  <input id="monoAsk" required maxlength="200" placeholder="Onde gastei mais?">
+  <button class="btn primary" type="submit">Analisar</button>
+ </form>
+ <p id="monoAnswer" role="status"></p>
+</dialog>
 <div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()"><div class="modal"><h2 id="modalTitle">Nova movimentação</h2><form class="form" id="modalForm"></form></div></div>
 <script>
 const KEY='mono-finance-v1';
@@ -145,6 +165,48 @@ function openPot(){showModal('Criar caixinha',input('name','Nome do objetivo')+i
 function deletePot(id){if(confirm('Excluir esta caixinha? O valor guardado será removido do cálculo do saldo.')){data.pots=data.pots.filter(p=>p.id!==id);save()}}
 function movePot(id,mode){let p=data.pots.find(x=>x.id===id),label=mode==='add'?'Guardar na caixinha':'Retirar da caixinha';showModal(label,`<p class="muted" style="margin:0">Saldo atual: ${money(p.saved)}</p>`+input('amount','Valor (R$)','number','','min="0.01" step="0.01"'),fd=>{let v=Number(fd.get('amount'));if(mode==='take'&&v>p.saved){alert('O valor é maior que o saldo da caixinha.');return}if(mode==='add'&&v>data.transactions.reduce((a,t)=>a+(t.type==='income'?1:-1)*Number(t.amount),0)-potTotal()){alert('Você não tem saldo disponível suficiente.');return}p.saved+=mode==='add'?v:-v;closeModal();save()})}
 function openSalary(){showModal('Definir salário',input('salary','Salário mensal previsto (R$)','number',data.salary||'','min="0" step="0.01"'),fd=>{data.salary=Number(fd.get('salary'));closeModal();save()})}
+function analyzeFinances(question) {
+ const query = question.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const transactions = monthTx();
+ const income = sum(transactions,'income');
+ const expenses = sum(transactions,'expense');
+ if (/caixinha|meta|guard/.test(query)) {
+  if (!data.pots.length) return 'Você ainda não criou caixinhas.';
+  return data.pots.map(p => {
+   const remaining = Math.max(0, p.target - p.saved);
+   return p.name + ': ' + money(p.saved) + ' guardados. ' +
+    (remaining ? 'Faltam ' + money(remaining) + '.' : 'Meta atingida.');
+  }).join('\n');
+ }
+ if (!transactions.length) return 'Nenhuma movimentação registrada em ' + selectedMonth + '.';
+ if (/gast|despes|categori|economiz/.test(query)) {
+  const totals = new Map();
+  for (const t of transactions.filter(t => t.type === 'expense')) {
+   const category = t.category || 'Sem categoria';
+   totals.set(category, (totals.get(category) || 0) + Number(t.amount));
+  }
+  const ranked = [...totals].sort((a,b) => b[1] - a[1]).slice(0,3);
+  if (!ranked.length) return 'Nenhuma despesa registrada em ' + selectedMonth + '.';
+  return 'Despesas em ' + selectedMonth + ': ' + money(expenses) +
+   '.\nMaiores categorias:\n' + ranked.map(([name,total]) => name + ': ' + money(total)).join('\n');
+ }
+ if (/sald|rend|receit|resum|entrad|sobr|mes/.test(query)) {
+  return 'Resumo de ' + selectedMonth + '\nEntradas: ' + money(income) +
+   '\nSaídas: ' + money(expenses) + '\nResultado do mês: ' + money(income-expenses) +
+   '\nGuardado nas caixinhas: ' + money(potTotal());
+ }
+ return 'Posso analisar o mês selecionado. Experimente “Onde gastei mais?”, “Resumo do mês” ou “Quanto falta para as minhas metas?”.';
+}
+const assistantDialog = document.getElementById('monoAssistant');
+document.getElementById('monoOpen').addEventListener('click', () => {
+ document.getElementById('monoAnswer').textContent = '';
+ assistantDialog.showModal();
+});
+document.getElementById('monoQuestion').addEventListener('submit', event => {
+ event.preventDefault();
+ document.getElementById('monoAnswer').textContent =
+  analyzeFinances(document.getElementById('monoAsk').value);
+});
 render();
 </script>
 
